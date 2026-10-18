@@ -43,10 +43,20 @@ npm run preview
 
 ## Deploying
 
+Cloud Run service `treatise-new` in GCP project `treatise-mapping-new` (us-central1), running as
+`treatise-new-run@`, a service account with no roles. Build the image locally for amd64, push it, deploy it:
+
 ```bash
-gcloud run deploy treatise-new --source . --project treatise-mapping-new --region us-central1 \
-  --service-account treatise-new-run@treatise-mapping-new.iam.gserviceaccount.com --allow-unauthenticated
+TAG=$(git rev-parse --short HEAD)
+IMG=us-central1-docker.pkg.dev/treatise-mapping-new/cloud-run-source-deploy/treatise-new:$TAG
+docker buildx build --platform linux/amd64 -t $IMG --push .
+gcloud run deploy treatise-new --image $IMG --project treatise-mapping-new --region us-central1 \
+  --service-account treatise-new-run@treatise-mapping-new.iam.gserviceaccount.com \
+  --allow-unauthenticated --memory 256Mi --max-instances 3 --port 8080
 ```
+
+The domain is a Cloud Run domain mapping; DNS is a CNAME for `treatise-mapping-project-new` at Squarespace
+pointing to `ghs.googlehosted.com`.
 
 ## Sources
 
