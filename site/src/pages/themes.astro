@@ -1,0 +1,59 @@
+---
+import Base from '../layouts/Base.astro';
+import ThemeBar from '../components/ThemeBar.astro';
+import { papers, meta, paperUrl, shortName, sectionById, sectionLabel } from '../lib/data';
+
+const sectionOf = (k: string) => k.startsWith('App') || k.startsWith('Abs') ? k.slice(0, 3)
+  : k.split('.')[0] === '0' ? '0' : k.split('.').slice(0, 3).join('.');
+
+const themed = papers.filter((p) => p.themes);
+const themes = meta.themes.map((t, i) => {
+  const members = themed.filter((p) => p.themes!.indexOf(Math.max(...p.themes!)) === i)
+    .sort((a, b) => b.themes![i] - a.themes![i]);
+  const prof = new Map<string, number>();
+  for (const p of members) {
+    const tot = Object.values(p.weights).reduce((s, v) => s + v, 0);
+    for (const [k, v] of Object.entries(p.weights)) {
+      const s = sectionOf(k);
+      if (s === '1.4.6' || s === 'App') continue;
+      prof.set(s, (prof.get(s) ?? 0) + v / tot);
+    }
+  }
+  const sections = [...prof.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s]) => s);
+  return { ...t, i, members, sections };
+});
+---
+<Base title="Themes">
+  <h1>Citation themes</h1>
+  <p class="lead">
+    Nearly every paper cites Book 1, Part 4, Section 6 and the Appendix, so those passages say little about what
+    distinguishes one paper from another. Setting them aside, the rest of each paper’s citations fall into four
+    themes. A paper can belong to several; it is listed under the one it leans on most.
+  </p>
+  <p class="muted small">Fitted with non-negative matrix factorisation on section-level citation profiles of the {themed.length}
+    papers with at least three citations outside 1.4.6 and the Appendix. The names are a first reading.</p>
+
+  {themes.map((t) => (
+    <section class="card" style="margin:1.4rem 0">
+      <h2 style="margin-top:0"><span class="sw" style={`display:inline-block;width:14px;height:14px;border-radius:3px;background:var(--t${t.i});margin-right:.5rem`}></span>{t.name}</h2>
+      <p class="small">Heaviest sections:
+        {t.sections.map((s, k) => <>{k ? ', ' : ' '}<span title={sectionById.get(s)?.title}>{sectionLabel(s)}</span>{sectionById.get(s)?.title && <span class="muted"> {sectionById.get(s)!.title.toLowerCase()}</span>}</>)}
+      </p>
+      <div class="scroll-x">
+        <table class="data">
+          <thead><tr><th>Paper</th><th>Title</th><th class="num">Share</th><th>Mix</th></tr></thead>
+          <tbody>
+            {t.members.map((p) => (
+              <tr>
+                <td style="white-space:nowrap"><a href={paperUrl(p.id)}>{shortName(p)}</a></td>
+                <td class="small">{p.title}</td>
+                <td class="num">{Math.round(p.themes![t.i] * 100)}%</td>
+                <td style="min-width:110px"><ThemeBar shares={p.themes} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  ))}
+</Base>

@@ -1,0 +1,90 @@
+---
+import Base from '../layouts/Base.astro';
+import { papers, shortName } from '../lib/data';
+const options = papers.filter((p) => p.cites > 0);
+---
+<Base title="Compare">
+  <h1>Compare papers</h1>
+  <p class="lead">Pick up to four papers, or the whole literature, and see where each spends its citations,
+    section by section.</p>
+  <div class="controls" id="pickers">
+    {[0, 1, 2, 3].map((k) => (
+      <select aria-label={`Paper ${k + 1}`} data-k={k}>
+        <option value="">{k === 0 ? 'Choose a paper' : 'Add a paper'}</option>
+        <option value="__lit">The whole literature</option>
+        {options.map((p) => <option value={p.id}>{shortName(p)}: {p.title.slice(0, 60)}</option>)}
+      </select>
+    ))}
+    <label><input type="checkbox" id="nocore" /> Hide 1.4.6 and the Appendix</label>
+  </div>
+  <div id="chart" class="plot card"><p class="muted">Choose papers above.</p></div>
+  <div id="table" style="margin-top:1.5rem"></div>
+</Base>
+
+<script>
+  import * as Plot from '@observablehq/plot';
+  import { loadPapers, css, type SlimPaper } from '../scripts/charts';
+
+  const pickers = [...document.querySelectorAll<HTMLSelectElement>('#pickers select')];
+  const nocore = document.getElementById('nocore') as HTMLInputElement;
+  const chartEl = document.getElementById('chart')!;
+  const tableEl = document.getElementById('table')!;
+  const params = new URLSearchParams(location.search).getAll('p');
+  params.slice(0, 4).forEach((v, k) => (pickers[k].value = v));
+
+  Promise.all([loadPapers(), fetch('/data/sections.json').then((r) => r.json())]).then(([papers, S]) => {
+    const order: string[] = S.sections.map((s: { id: string }) => s.id);
+    const titles = Object.fromEntries(S.sections.map((s: { id: string; title: string }) => [s.id, s.title]));
+    const byId = new Map(papers.map((p: SlimPaper) => [p.id, p]));
+    const lit: SlimPaper = { id: '__lit', name: 'Whole literature', title: '', year: null, cites: 0, focus: null, surprise: null, themes: null, weights: {} };
+    for (const p of papers) {
+      const tot = Object.values(p.weights).reduce((s, v) => s + v, 0);
+      if (!tot) continue;
+      for (const [k, v] of Object.entries(p.weights)) lit.weights[k] = (lit.weights[k] ?? 0) + v / tot;
+    }
+    byId.set('__lit', lit);
+
+    const draw = () => {
+      const chosen = pickers.map((s) => s.value).filter(Boolean).map((id) => byId.get(id)!).filter(Boolean);
+      const url = new URL(location.href);
+      url.search = chosen.map((p) => `p=${encodeURIComponent(p.id)}`).join('&');
+      history.replaceState(null, '', url);
+      if (!chosen.length) { chartEl.innerHTML = '<p class="muted">Choose papers above.</p>'; tableEl.replaceChildren(); return; }
+      const hide = nocore.checked ? new Set(['1.4.6', 'App']) : new Set<string>();
+      const rows: { paper: string; section: string; share: number }[] = [];
+      const shares = chosen.map((p) => {
+        const prof: Record<string, number> = {};
+        for (const [k, v] of Object.entries(p.weights)) {
+          const s = S.section[k]; if (!s || hide.has(s)) continue;
+          prof[s] = (prof[s] ?? 0) + v;
+        }
+        const tot = Object.values(prof).reduce((a, b) => a + b, 0) || 1;
+        for (const s of Object.keys(prof)) prof[s] /= tot;
+        return prof;
+      });
+      const used = order.filter((s) => shares.some((pr) => (pr[s] ?? 0) > 0.004));
+      chosen.forEach((p, i) => used.forEach((s) => rows.push({ paper: p.name, section: s, share: shares[i][s] ?? 0 })));
+      const width = Math.max(chartEl.clientWidth - 32, used.length * 16 + 120);
+      chartEl.replaceChildren(Plot.plot({
+        width, height: 70 + chosen.length * 38, marginLeft: 130, marginBottom: 60,
+        style: { background: 'transparent', color: css('--ink-2'), fontSize: '11px' },
+        x: { domain: used, label: null, tickRotate: -60 },
+        y: { domain: chosen.map((p) => p.name), label: null },
+        color: { type: 'sqrt', range: [css('--empty'), css('--accent')], domain: [0, Math.max(...rows.map((r) => r.share))], legend: true, label: 'Share of the paper’s citations', tickFormat: '.0%' },
+        marks: [
+          Plot.cell(rows, { x: 'section', y: 'paper', fill: 'share', inset: 1, rx: 2,
+            title: (d: typeof rows[number]) => `${d.paper}\n${d.section} ${titles[d.section] ?? ''}\n${(d.share * 100).toFixed(1)}% of citations` }),
+        ],
+      }));
+      // Top sections per paper
+      const top = chosen.map((p, i) => `<div class="card"><strong>${p.name}</strong>${p.title ? `<br><span class="small muted">${p.title}</span>` : ''}<ul class="plain small">${
+        Object.entries(shares[i]).sort((a, b) => b[1] - a[1]).slice(0, 6)
+          .map(([s, v]) => `<li>${(v * 100).toFixed(0)}% · ${s} <span class="muted">${titles[s] ?? ''}</span></li>`).join('')}</ul></div>`);
+      tableEl.innerHTML = `<div class="grid2">${top.join('')}</div>`;
+    };
+    pickers.forEach((s) => s.addEventListener('change', draw));
+    nocore.addEventListener('change', draw);
+    addEventListener('resize', draw);
+    draw();
+  });
+</script>

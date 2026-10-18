@@ -1,0 +1,62 @@
+---
+import Base from '../layouts/Base.astro';
+import { meta, papers } from '../lib/data';
+const t = meta.totals;
+const bySource = papers.reduce((acc, p) => {
+  for (const [k, v] of Object.entries(p.sources)) acc[k] = (acc[k] ?? 0) + v;
+  return acc;
+}, {} as Record<string, number>);
+const zero = papers.filter((p) => p.cites === 0).length;
+---
+<Base title="About">
+  <div class="narrow">
+    <h1>About this map</h1>
+    <p class="lead">Treatise Mapping asks which passages of Hume’s <em>Treatise</em> the secondary literature on
+      personal identity actually reads, and which papers find their way to passages the rest of the literature passes by.</p>
+
+    <h2>The corpus</h2>
+    <p>{t.papers} papers from the PhilPapers category on Hume and personal identity, collected in 2020. Their PDFs
+      and full texts are kept privately; this site shows only where each paper cites the Treatise, a short snippet
+      around each citation, and bibliographic details.</p>
+
+    <h2>Finding citations</h2>
+    <p>Each PDF was converted with <a href="https://github.com/docling-project/docling">docling</a>, with OCR only for
+      scanned papers. A staged detector then looked for citations:</p>
+    <ol>
+      <li><strong>Citation patterns</strong> ({bySource.pattern?.toLocaleString('en')}): Norton references like
+        T 1.4.6.4, Selby-Bigge pages like SBN 252, and forms like “(T 252)”.</li>
+      <li><strong>Quote matches</strong> ({bySource.quote}): a bare page number after a quotation, accepted when the
+        quoted words appear in the Treatise on that page.</li>
+      <li><strong>Model checks</strong> ({bySource.llm}): the remaining ambiguous page numbers, judged with their context
+        by Gemini on Vertex AI. Most ambiguous numbers turned out to cite other scholars’ books, and were dropped.</li>
+    </ol>
+    <p>{t.cites.toLocaleString('en')} citations were accepted. {zero} papers have none, mostly book reviews whose
+      page numbers refer to the book under review.</p>
+
+    <h2>From citations to paragraphs</h2>
+    <p>Each citation spreads one unit of weight over the paragraphs it covers: a Norton paragraph gets all of it,
+      a section or a Selby-Bigge page shares it among its paragraphs. A paragraph’s shade on the map is the total
+      weight it receives across the corpus.</p>
+
+    <h2>Focus and surprise</h2>
+    <p><strong>Focus</strong> is the share of a paper’s citations on the 15 most-cited paragraphs, mostly
+      T 1.4.6 and Appendix 10 to 21. <strong>Surprise</strong> asks how unlikely it was that a paper with this many
+      citations would cite a given paragraph at all, and takes the highest value over the paragraphs it cites precisely
+      (with at least 0.3 of a citation, which keeps page-range smearing out). Both are given for the {t.scored} papers
+      with at least 10 citations.</p>
+    <p>The two are shown separately on purpose. Every single-number novelty measure we tried, including the 2020 site’s
+      “difference from the literature”, TF-IDF and KL divergence, ranked off-topic papers as the most novel.</p>
+
+    <h2>Themes</h2>
+    <p>Four citation themes come from non-negative matrix factorisation of section-level citation profiles, with
+      1.4.6 and the Appendix left out because nearly everyone cites them. See <a href="/themes/">Themes</a>.</p>
+
+    <h2>Sources and versions</h2>
+    <p>The Treatise text and its Norton and Selby-Bigge numbering come from
+      <a href="https://davidhume.org/texts/t/">Hume Texts Online</a>, edited by Peter Millican and Amyas Merivale.
+      References follow David Fate Norton and Mary J. Norton’s Clarendon edition (T) and L. A. Selby-Bigge and
+      P. H. Nidditch’s edition (SBN).</p>
+    <p>The first version of this project (2020) used a simpler extraction pipeline and is archived, as it was, at
+      <a href="https://treatise-mapping-project-ur.outsidethevillage.com">treatise-mapping-project-ur.outsidethevillage.com</a>.</p>
+  </div>
+</Base>

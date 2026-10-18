@@ -1,0 +1,68 @@
+---
+import Base from '../../layouts/Base.astro';
+import ThemeBar from '../../components/ThemeBar.astro';
+import { papers, meta, paperUrl, isFocused, isSurprising } from '../../lib/data';
+---
+<Base title="Papers">
+  <h1>Papers</h1>
+  <p class="lead">
+    The {papers.length} papers in the corpus, drawn from the PhilPapers category on Hume and personal identity.
+    Focus and surprise are given for the {meta.totals.scored} papers with at least 10 citations.
+    Click a column to sort.
+  </p>
+  <div class="controls">
+    <input type="search" id="filter" placeholder="Filter by author or title" aria-label="Filter papers" style="min-width:min(320px,100%)" />
+    <div class="themekey">{meta.themes.map((t, i) => <span><span class="sw" style={`background: var(--t${i})`}></span>{t.name}</span>)}</div>
+  </div>
+  <div class="scroll-x">
+    <table class="data" id="papers">
+      <thead>
+        <tr>
+          <th data-sort="text">Author</th>
+          <th data-sort="num" class="num">Year</th>
+          <th>Title</th>
+          <th data-sort="num" class="num">Citations</th>
+          <th data-sort="num" class="num">Focus</th>
+          <th data-sort="num" class="num">Surprise</th>
+          <th>Theme mix</th>
+        </tr>
+      </thead>
+      <tbody>
+        {papers.map((p) => (
+          <tr data-q={`${p.author} ${p.title} ${p.venue}`.toLowerCase()}>
+            <td data-v={p.author}>{p.author}</td>
+            <td class="num" data-v={p.year ?? 0}>{p.year}</td>
+            <td><a href={paperUrl(p.id)}>{p.title}</a>{p.venue && <><br /><span class="muted small">{p.venue}</span></>}</td>
+            <td class="num" data-v={p.cites}>{p.cites}</td>
+            <td class="num" data-v={p.focus ?? -1}>{p.focus !== null ? `${Math.round(p.focus * 100)}%` : '–'}{isFocused(p) && isSurprising(p) && ' ★'}</td>
+            <td class="num" data-v={p.surprise ?? -1}>{p.surprise?.toFixed(2) ?? '–'}</td>
+            <td style="min-width:110px"><ThemeBar shares={p.themes} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">★ focused and surprising: at least {Math.round(meta.focusMin * 100)}% focus and surprise of {meta.surpriseMin} or more.</p>
+</Base>
+
+<script>
+  const table = document.getElementById('papers') as HTMLTableElement;
+  const body = table.tBodies[0];
+  const filter = document.getElementById('filter') as HTMLInputElement;
+  filter.addEventListener('input', () => {
+    const q = filter.value.trim().toLowerCase();
+    for (const tr of body.rows) tr.hidden = !!q && !tr.dataset.q!.includes(q);
+  });
+  table.querySelectorAll<HTMLTableCellElement>('th[data-sort]').forEach((th) => {
+    let dir = 1;
+    th.addEventListener('click', () => {
+      const col = th.cellIndex, num = th.dataset.sort === 'num';
+      dir = -dir;
+      const rows = [...body.rows].sort((a, b) => {
+        const x = a.cells[col].dataset.v!, y = b.cells[col].dataset.v!;
+        return (num ? +x - +y : x.localeCompare(y)) * dir;
+      });
+      body.append(...rows);
+    });
+  });
+</script>

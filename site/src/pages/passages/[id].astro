@@ -1,0 +1,91 @@
+---
+import Base from '../../layouts/Base.astro';
+import {
+  paragraphs, passages, sectionById, meta, label, sectionLabel, passageUrl, paperUrl,
+  shortName, citationsOf, sourceLabel, rangeLabel, isFocused,
+} from '../../lib/data';
+
+export function getStaticPaths() {
+  return paragraphs.map((p, i) => ({ params: { id: p.id }, props: { i } }));
+}
+const { i } = Astro.props as { i: number };
+const p = paragraphs[i];
+const prev = paragraphs[i - 1];
+const next = paragraphs[i + 1];
+const ps = passages[p.id];
+const sec = sectionById.get(p.section)!;
+const groups = citationsOf(p.id).sort((a, b) =>
+  Number(b.cites.some((c) => c.precise)) - Number(a.cites.some((c) => c.precise)) ||
+  (a.paper.year ?? 0) - (b.paper.year ?? 0));
+const precise = groups.filter((g) => g.cites.some((c) => c.precise && c.paras.length <= 3)).length;
+
+// Highlight the citation text inside its snippet
+function marked(ctx: string, text: string) {
+  const j = ctx.indexOf(text);
+  if (j < 0) return [ctx, '', ''];
+  return [ctx.slice(0, j), text, ctx.slice(j + text.length)];
+}
+const title = `${label(p.id)}`;
+---
+<Base title={title} description={`${label(p.id)}: ${ps.text.slice(0, 140)}`}>
+  <div class="crumbs">
+    <a href="/">Map</a>{' · '}{meta.books[p.book] ?? p.book}
+    {sec.part && <>{' · '}Part {sec.part.split('.')[1]}: {sec.partTitle}{' · '}{sectionLabel(sec.id)} {sec.title}</>}
+  </div>
+  <div data-pagefind-body>
+    <h1>{label(p.id)}</h1>
+    <p class="muted" data-pagefind-meta="type:Passage">
+      {p.sbn && <>SBN {p.sbn} · </>}
+      {groups.length ? <>cited directly by {precise} {precise === 1 ? 'paper' : 'papers'}{groups.length > precise && `, reached by ${groups.length - precise} more through page or section ranges`}</> : 'not cited in the corpus'}
+      {p.core && <> · <span class="badge core">core paragraph</span></>}
+      {p.rare && <> · <span class="badge rare">rare passage</span></>}
+    </p>
+
+    {ps.text
+      ? <div class="hume"><p>{ps.text}</p></div>
+      : <p class="muted">The text of this paragraph is not in the edition used here.</p>}
+  </div>
+
+  {p.rare && (
+    <div class="card" style="margin:1.4rem 0">
+      <strong>A rare passage.</strong> Cited by at most three papers, at least one of them focused on personal
+      identity{ps.focusedCiters.length ? <> ({ps.focusedCiters.map((id, k) => <>{k ? ', ' : ''}<a href={paperUrl(id)}>{id}</a></>)})</> : null}.
+      These are the passages a focused reader brought into the conversation that the literature otherwise passes by.
+    </div>
+  )}
+
+  {groups.length > 0 && (
+    <>
+      <h2>Who cites it</h2>
+      <p class="muted small">
+        {precise} of {groups.length} {groups.length === 1 ? 'paper cites' : 'papers cite'} this paragraph directly;
+        the rest reach it through a page or section range. Snippets are the words around each citation.
+      </p>
+      <div class="scroll-x">
+        <table class="data">
+          <thead><tr><th>Paper</th><th>Cited as</th><th>Context</th></tr></thead>
+          <tbody>
+            {groups.map((g) => g.cites.map((c, k) => {
+              const [a, b, z] = marked(c.context, c.text);
+              return (
+                <tr>
+                  <td>{k === 0 && <><a href={paperUrl(g.paper.id)}>{shortName(g.paper)}</a>
+                    {isFocused(g.paper) && <><br /><span class="badge core">focused</span></>}</>}</td>
+                  <td><span class="mono">{c.text}</span><br />
+                    <span class="muted small">{c.paras.length > 1 ? rangeLabel(c.paras) : 'this paragraph'}</span><br />
+                    <span class={`badge ${c.source}`}>{sourceLabel[c.source]}</span></td>
+                  <td class="snippet small">…{a}<mark>{b}</mark>{z}…</td>
+                </tr>
+              );
+            }))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )}
+
+  <nav class="pager">
+    {prev ? <a href={passageUrl(prev.id)}>← {label(prev.id)}</a> : <span></span>}
+    {next ? <a href={passageUrl(next.id)}>{label(next.id)} →</a> : <span></span>}
+  </nav>
+</Base>

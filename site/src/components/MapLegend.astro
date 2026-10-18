@@ -1,0 +1,11 @@
+---
+const steps = [0.12, 0.34, 0.56, 0.78, 1];
+---
+<div class="legend">
+  <span>Fewer cites
+    <span class="ramp">{steps.map((a) => <span style={`background: rgba(var(--accent-rgb), ${a})`}></span>)}</span>
+    more</span>
+  <span><span class="sw" style="background: var(--empty)"></span>not cited</span>
+  <span><span class="sw" style="outline: 1.5px solid var(--core); outline-offset: -1.5px; background: var(--empty)"></span>one of the 15 core paragraphs</span>
+  <span><span class="sw" style="width:6px; background: var(--empty)"></span>footnote</span>
+</div>

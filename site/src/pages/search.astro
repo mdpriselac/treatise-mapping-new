@@ -1,0 +1,66 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Search">
+  <h1>Search</h1>
+  <form id="jump" class="controls" autocomplete="off">
+    <label for="loc">Go to a passage</label>
+    <input type="text" id="loc" placeholder="T 1.4.6.4, App 20, or SBN 252" style="min-width:min(280px,100%)" />
+    <button type="submit">Go</button>
+    <span id="jump-msg" class="muted small"></span>
+  </form>
+  <p class="muted small">Or search the words of the Treatise and the authors and titles of the papers:</p>
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet" />
+  <div id="search"></div>
+</Base>
+
+<style is:global>
+  #search { --pagefind-ui-primary: var(--accent-2); --pagefind-ui-text: var(--ink); --pagefind-ui-background: var(--surface);
+    --pagefind-ui-border: var(--rule); --pagefind-ui-tag: var(--empty); --pagefind-ui-font: var(--sans); }
+</style>
+
+<script>
+  const form = document.getElementById('jump') as HTMLFormElement;
+  const input = document.getElementById('loc') as HTMLInputElement;
+  const msg = document.getElementById('jump-msg')!;
+  let sbnIndex: Promise<{ sbn: Record<string, string> }> | null = null;
+
+  // Expand an SBN cell like "252-3", "252,253" or "xiii-iv" into its page list.
+  function pages(spec: string): string[] {
+    if (spec.includes(',')) return spec.split(',').flatMap((x) => pages(x.trim()));
+    const [a, b] = spec.split('-');
+    if (!b || !/^\d+$/.test(a)) return [a];
+    const end = b.length >= a.length ? +b : +(a.slice(0, a.length - b.length) + b);
+    const out = [];
+    for (let n = +a; n <= end; n++) out.push(String(n));
+    return out;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = input.value.trim().replace(/^(T|THN)\s*/i, '');
+    let m;
+    if ((m = q.match(/^(\d+(?:\.\d+){1,3}(?:\s*n\d+)?)$/))) return void (location.href = `/passages/${m[1].replace(/\s+/g, '')}/`);
+    if ((m = q.match(/^App\.?\s*(\d+)$/i))) return void (location.href = `/passages/App.${m[1]}/`);
+    if ((m = q.match(/^Abs\.?\s*(\d+)$/i))) return void (location.href = `/passages/Abs${m[1]}/`);
+    if ((m = q.match(/^(?:SBN|SB|p\.?)\s*([0-9]+|[ivxl]+)$/i))) {
+      sbnIndex ??= fetch('/data/sections.json').then((r) => r.json());
+      const { sbn } = await sbnIndex;
+      const hit = Object.entries(sbn).filter(([, s]) => s && pages(s).includes(m![1].toLowerCase()));
+      if (hit.length) return void (location.href = `/passages/${hit[0][0]}/`);
+      msg.textContent = `No paragraph on SBN page ${m[1]}.`;
+      return;
+    }
+    msg.textContent = 'Try a Norton number like 1.4.6.4, App 20, or SBN 252.';
+  });
+
+  // Pagefind's UI is generated at build time, so load it at runtime.
+  const s = document.createElement('script');
+  s.src = '/pagefind/pagefind-ui.js';
+  s.onload = () => {
+    // @ts-ignore
+    new PagefindUI({ element: '#search', showSubResults: false, showImages: false, resetStyles: false });
+  };
+  s.onerror = () => { document.getElementById('search')!.innerHTML = '<p class="muted">Full-text search is available on the built site.</p>'; };
+  document.head.append(s);
+</script>

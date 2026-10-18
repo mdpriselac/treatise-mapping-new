@@ -1,0 +1,21 @@
+---
+import { meta } from '../lib/data';
+interface Props { shares: number[] | null; showKey?: boolean }
+const { shares, showKey = false } = Astro.props;
+---
+{shares ? (
+  <>
+    <div class="themebar" role="img"
+         aria-label={meta.themes.map((t, i) => `${t.name} ${Math.round(shares[i] * 100)}%`).join(', ')}
+         title={meta.themes.map((t, i) => `${t.name} ${Math.round(shares[i] * 100)}%`).join('\n')}>
+      {shares.map((s, i) => <span style={`width:${(s * 100).toFixed(1)}%; background: var(--t${i})`}></span>)}
+    </div>
+    {showKey && (
+      <div class="themekey" style="margin-top:.5rem">
+        {meta.themes.map((t, i) => (
+          <span><span class="sw" style={`background: var(--t${i})`}></span>{t.name} {Math.round(shares[i] * 100)}%</span>
+        ))}
+      </div>
+    )}
+  </>
+) : <span class="muted small">Too few citations outside 1.4.6 and the Appendix</span>}

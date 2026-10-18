@@ -1,0 +1,125 @@
+---
+import Base from '../layouts/Base.astro';
+import TreatiseMap from '../components/TreatiseMap.astro';
+import MapLegend from '../components/MapLegend.astro';
+import { meta, papers, paragraphs, passages, label, passageUrl } from '../lib/data';
+
+const decades = [...new Set(papers.map((p) => p.year && Math.floor(p.year / 10) * 10).filter(Boolean))].sort();
+const top = paragraphs.slice().sort((a, b) => b.n - a.n).slice(0, 8);
+const rare = paragraphs.filter((p) => p.rare)
+  .sort((a, b) => (passages[b.id].rareScore ?? 0) - (passages[a.id].rareScore ?? 0)).slice(0, 8);
+const t = meta.totals;
+---
+<Base title="Treatise Mapping">
+  <p class="eyebrow">Hume’s Treatise and the personal identity literature</p>
+  <h1>Which parts of the Treatise does the literature read?</h1>
+  <p class="lead">
+    Every square below is one paragraph of Hume’s <em>Treatise of Human Nature</em>, in order, shaded by how
+    often {t.papers} papers on Hume and personal identity cite it. The heavy rows are Book 1, Part 4,
+    Section 6 and the Appendix; the interesting finds are the faint squares far from them.
+  </p>
+
+  <div class="tiles">
+    <div class="tile"><div class="v">{t.papers}</div><div class="k">papers</div></div>
+    <div class="tile"><div class="v">{t.cites.toLocaleString('en')}</div><div class="k">citations found</div></div>
+    <div class="tile"><div class="v">{t.cited} / {t.paragraphs.toLocaleString('en')}</div><div class="k">paragraphs reached by a citation</div></div>
+    <div class="tile"><div class="v">{paragraphs.filter((p) => p.rare).length}</div><div class="k">rare passages with a focused citer</div></div>
+  </div>
+
+  <h2>The Treatise as a map</h2>
+  <div class="controls">
+    <label>Theme
+      <select id="f-theme">
+        <option value="">All papers</option>
+        {meta.themes.map((th, i) => <option value={i}>{th.name}</option>)}
+      </select>
+    </label>
+    <label>Decade
+      <select id="f-decade">
+        <option value="">All years</option>
+        {decades.map((d) => <option value={d}>{d}s</option>)}
+      </select>
+    </label>
+    <span id="f-note" class="muted small"></span>
+  </div>
+  <MapLegend />
+  <TreatiseMap id="map" />
+
+  <h2>Focus and surprise</h2>
+  <p class="narrow">
+    Each dot is a paper with at least 10 citations. Focus is the share of its citations on the 15 most-cited
+    paragraphs; surprise is how unlikely its rarest precise citation was, given how much the paper cites.
+    Papers in the shaded corner stay on personal identity and still bring in something almost nobody else cites.
+  </p>
+  <div id="scatter" class="plot card" data-focus={meta.focusMin} data-surprise={meta.surpriseMin}></div>
+
+  <div class="grid2" style="margin-top:2rem">
+    <div>
+      <h3>Most cited paragraphs</h3>
+      <ul class="plain">
+        {top.map((p) => (
+          <li><a href={passageUrl(p.id)}>{label(p.id)}</a> <span class="muted small">reached by {p.n} papers</span><br />
+            <span class="snippet small">{passages[p.id].text.slice(0, 110)}…</span></li>
+        ))}
+      </ul>
+    </div>
+    <div>
+      <h3>Rare passages</h3>
+      <ul class="plain">
+        {rare.map((p) => (
+          <li><a href={passageUrl(p.id)}>{label(p.id)}</a> <span class="muted small">cited directly by {passages[p.id].rareN} {passages[p.id].rareN === 1 ? 'paper' : 'papers'}</span><br />
+            <span class="snippet small">{passages[p.id].text.slice(0, 110)}…</span></li>
+        ))}
+      </ul>
+    </div>
+  </div>
+</Base>
+
+<script>
+  import { loadPapers, scatter } from '../scripts/charts';
+
+  const map = document.getElementById('map')!;
+  const cells = [...map.querySelectorAll<HTMLAnchorElement>('a.c')];
+  const theme = document.getElementById('f-theme') as HTMLSelectElement;
+  const decade = document.getElementById('f-decade') as HTMLSelectElement;
+  const note = document.getElementById('f-note')!;
+  const original = new Map(cells.map((c) => [c, [c.getAttribute('style'), c.title] as const]));
+
+  loadPapers().then((papers) => {
+    const el = document.getElementById('scatter')!;
+    const draw = () => scatter(el, papers, { focusMin: +el.dataset.focus!, surpriseMin: +el.dataset.surprise! });
+    draw();
+    addEventListener('resize', draw);
+
+    const recolor = () => {
+      const ti = theme.value === '' ? null : +theme.value;
+      const dec = decade.value === '' ? null : +decade.value;
+      if (ti === null && dec === null) {
+        for (const [c, [s, t]] of original) { s ? c.setAttribute('style', s) : c.removeAttribute('style'); c.title = t; }
+        note.textContent = '';
+        return;
+      }
+      const w: Record<string, number> = {};
+      let used = 0;
+      for (const p of papers) {
+        if (dec !== null && (!p.year || Math.floor(p.year / 10) * 10 !== dec)) continue;
+        const share = ti === null ? 1 : p.themes ? p.themes[ti] : 0;
+        if (!share) continue;
+        used += share;
+        for (const [k, v] of Object.entries(p.weights)) w[k] = (w[k] ?? 0) + v * share;
+      }
+      const max = Math.max(1e-9, ...Object.values(w));
+      for (const c of cells) {
+        const x = w[c.dataset.id!] ?? 0;
+        if (x > 0) c.style.background = `rgba(var(--accent-rgb), ${(0.12 + 0.88 * Math.log1p(x) / Math.log1p(max)).toFixed(3)})`;
+        else c.style.removeProperty('background');
+        c.title = c.title.replace(/ · [^·]*$/, ` · ${x ? x.toFixed(1) + ' weighted cites' : 'not cited'}`);
+      }
+      note.textContent = ti === null
+        ? `${Math.round(used)} papers`
+        : `weighted by each paper’s share of this theme (${used.toFixed(1)} paper-equivalents)`;
+    };
+    theme.addEventListener('change', recolor);
+    decade.addEventListener('change', recolor);
+  });
+</script>

@@ -1,0 +1,51 @@
+---
+import '../styles/global.css';
+
+interface Props { title: string; description?: string }
+const { title, description = 'Which passages of Hume’s Treatise the literature on personal identity cites, and where it goes off the beaten path.' } = Astro.props;
+const path = Astro.url.pathname;
+const nav = [
+  ['/', 'Map'],
+  ['/papers/', 'Papers'],
+  ['/themes/', 'Themes'],
+  ['/compare/', 'Compare'],
+  ['/search/', 'Search'],
+  ['/about/', 'About'],
+];
+const current = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title === 'Treatise Mapping' ? title : `${title} · Treatise Mapping`}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="site">
+      <div class="wrap">
+        <a class="brand" href="/">Treatise Mapping</a>
+        <nav aria-label="Main">
+          {nav.map(([href, name]) => (
+            <a href={href} aria-current={current(href) ? 'page' : undefined}>{name}</a>
+          ))}
+        </nav>
+      </div>
+    </header>
+    <main>
+      <div class="wrap">
+        <slot />
+      </div>
+    </main>
+    <footer class="site">
+      <div class="wrap">
+        Treatise Mapping, by Matt Priselac. Treatise text and Norton/SBN numbering from
+        <a href="https://davidhume.org/texts/t/">Hume Texts Online</a>.
+        The 2020 version is archived at
+        <a href="https://treatise-mapping-project-ur.outsidethevillage.com">treatise-mapping-project-ur</a>.
+      </div>
+    </footer>
+  </body>
+</html>

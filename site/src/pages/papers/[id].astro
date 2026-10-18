@@ -1,0 +1,131 @@
+---
+import Base from '../../layouts/Base.astro';
+import TreatiseMap from '../../components/TreatiseMap.astro';
+import MapLegend from '../../components/MapLegend.astro';
+import ThemeBar from '../../components/ThemeBar.astro';
+import {
+  papers, paperById, citations, meta, label, passageUrl, paperUrl, shortName,
+  sourceLabel, rangeLabel, isFocused, isSurprising, paragraphById,
+} from '../../lib/data';
+
+export function getStaticPaths() {
+  return papers.map((p) => ({ params: { id: p.id } }));
+}
+const p = paperById.get(Astro.params.id!)!;
+const cites = citations[p.id] ?? [];
+const touched = Object.keys(p.weights).length;
+const where = p.editor
+  ? `In ${p.venue}, ed. ${p.editor}${p.pages ? `, ${p.pages}` : ''}`
+  : [p.venue, [p.volume, p.issue && `(${p.issue})`].filter(Boolean).join(''), ].filter(Boolean).join(' ')
+    + (p.pages ? `: ${p.pages}` : '');
+const cite = `${p.author} (${p.year ?? 'n.d.'}). “${p.title}.”${where ? ` ${where}.` : ''}`;
+const verdict = p.focus === null ? null
+  : isFocused(p) && isSurprising(p) ? 'Focused on personal identity, and cites something almost nobody else does.'
+  : isFocused(p) ? 'Focused on personal identity, mostly through the passages everyone cites.'
+  : isSurprising(p) ? 'Ranges beyond the core passages and cites something rare.'
+  : 'Ranges beyond the core passages, through commonly cited ones.';
+
+function marked(ctx: string, text: string) {
+  const j = ctx.indexOf(text);
+  return j < 0 ? [ctx, '', ''] : [ctx.slice(0, j), text, ctx.slice(j + text.length)];
+}
+---
+<Base title={shortName(p)} description={`${p.title}: where it cites Hume’s Treatise.`}>
+  <div class="crumbs"><a href="/papers/">Papers</a></div>
+  <div data-pagefind-body>
+    <p class="eyebrow" data-pagefind-meta="type:Paper">{p.author}{p.year && ` · ${p.year}`}</p>
+    <h1>{p.title}</h1>
+    <p class="muted">{cite}</p>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="v">{p.cites}</div><div class="k">citations of the Treatise</div></div>
+    <div class="tile"><div class="v">{touched}</div><div class="k">paragraphs reached</div></div>
+    <div class="tile"><div class="v">{p.focus !== null ? `${Math.round(p.focus * 100)}%` : '–'}</div><div class="k">focus on the core paragraphs</div></div>
+    <div class="tile"><div class="v">{p.surprise?.toFixed(2) ?? '–'}</div><div class="k">surprise of rarest citation</div></div>
+  </div>
+
+  {p.cites === 0 ? (
+    <p class="card">No citations of the Treatise were found in this paper. Most papers like this are book reviews,
+      whose page numbers refer to the book under review, or older scans whose text could not be read reliably.</p>
+  ) : (
+    <>
+      {verdict && <p class="lead">{verdict}</p>}
+      <div class="grid2">
+        <div>
+          <h3>Theme mix</h3>
+          <ThemeBar shares={p.themes} showKey />
+          <p class="muted small" style="margin-top:.5rem">Themes are fitted on citations outside 1.4.6 and the Appendix, which nearly every paper cites.</p>
+          {p.topRare.length > 0 && (
+            <>
+              <h3>Its rarest citations</h3>
+              <ul class="plain">
+                {p.topRare.map((r) => (
+                  <li><a href={passageUrl(r)}>{label(r)}</a> <span class="muted small">{(paragraphById.get(r)?.n ?? 0) <= 1 ? 'no other paper reaches it' : `${(paragraphById.get(r)?.n ?? 1) - 1} other papers reach it`}</span></li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+        <div>
+          <h3>Nearest papers</h3>
+          {p.neighbours.length ? (
+            <ul class="plain">
+              {p.neighbours.map((n) => {
+                const q = paperById.get(n.id)!;
+                return <li><a href={paperUrl(q.id)}>{shortName(q)}</a> <span class="muted small">similarity {n.sim.toFixed(2)}</span><br /><span class="small">{q.title}</span></li>;
+              })}
+            </ul>
+          ) : <p class="muted small">Needs at least 10 citations.</p>}
+          {p.neighbours.length > 0 && <p class="small"><a href={`/compare/?p=${p.id}&p=${p.neighbours[0].id}`}>Compare with {shortName(paperById.get(p.neighbours[0].id)!)} →</a></p>}
+        </div>
+      </div>
+
+      {p.focus !== null && (
+        <>
+          <h2>Against the corpus</h2>
+          <div id="scatter" class="plot card" data-id={p.id} data-focus={meta.focusMin} data-surprise={meta.surpriseMin}></div>
+        </>
+      )}
+
+      <h2>Where it cites the Treatise</h2>
+      <MapLegend />
+      <TreatiseMap weights={p.weights} onlyCited />
+
+      <h2>The evidence</h2>
+      <p class="muted small">Every citation the pipeline accepted, with the words around it.
+        “Citation pattern” means a standard Norton or Selby-Bigge reference;
+        “quote matched” means the quoted words were found in the Treatise at that page;
+        “checked by model” means a language model judged an ambiguous page number to be a Treatise citation.</p>
+      <div class="scroll-x">
+        <table class="data">
+          <thead><tr><th>Cited as</th><th>Maps to</th><th>Context</th></tr></thead>
+          <tbody>
+            {cites.map((c) => {
+              const [a, b, z] = marked(c.context, c.text);
+              return (
+                <tr>
+                  <td><span class="mono">{c.text}</span><br /><span class={`badge ${c.source}`}>{sourceLabel[c.source]}</span></td>
+                  <td class="small">{c.paras.length === 1
+                    ? <a href={passageUrl(c.paras[0])}>{label(c.paras[0])}</a>
+                    : <a href={passageUrl(c.paras[0])}>{rangeLabel(c.paras)}</a>}</td>
+                  <td class="snippet small">…{a}<mark>{b}</mark>{z}…</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )}
+</Base>
+
+<script>
+  import { loadPapers, scatter } from '../../scripts/charts';
+  const el = document.getElementById('scatter');
+  if (el) loadPapers().then((papers) => {
+    const draw = () => scatter(el, papers, { highlight: el.dataset.id, focusMin: +el.dataset.focus!, surpriseMin: +el.dataset.surprise! });
+    draw();
+    addEventListener('resize', draw);
+  });
+</script>

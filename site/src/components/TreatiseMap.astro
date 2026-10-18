@@ -1,0 +1,67 @@
+---
+import { paragraphs, paragraphById, sections, meta, shade, label, passageUrl, sectionLabel } from '../lib/data';
+
+interface Props {
+  /** paragraph id -> weight; defaults to the whole literature */
+  weights?: Record<string, number>;
+  /** show only sections with at least one cited paragraph */
+  onlyCited?: boolean;
+  id?: string;
+}
+const { weights, onlyCited = false, id } = Astro.props;
+const w = (pid: string) => (weights ? weights[pid] ?? 0 : paragraphById.get(pid)!.w);
+const max = Math.max(...paragraphs.map((p) => w(p.id)));
+
+const bySection = new Map<string, typeof paragraphs>();
+for (const p of paragraphs) {
+  if (!bySection.has(p.section)) bySection.set(p.section, []);
+  bySection.get(p.section)!.push(p);
+}
+type Row = { sec: (typeof sections)[number]; paras: typeof paragraphs; total: number };
+const books: { book: string; parts: { part: string | null; title: string; rows: Row[] }[] }[] = [];
+for (const sec of sections) {
+  const paras = bySection.get(sec.id) ?? [];
+  const total = paras.reduce((s, p) => s + w(p.id), 0);
+  if (onlyCited && total === 0) continue;
+  let b = books.at(-1);
+  if (!b || b.book !== sec.book) { b = { book: sec.book, parts: [] }; books.push(b); }
+  let pt = b.parts.at(-1);
+  if (!pt || pt.part !== sec.part) { pt = { part: sec.part, title: sec.partTitle, rows: [] }; b.parts.push(pt); }
+  pt.rows.push({ sec, paras, total });
+}
+const fmt = (x: number) => (x >= 10 ? x.toFixed(0) : x.toFixed(1));
+const tip = (pid: string, sbn: string) => {
+  const x = w(pid);
+  return `${label(pid)}${sbn ? ` · SBN ${sbn}` : ''} · ${x ? `${fmt(x)} cite weight` : 'not cited'}`;
+};
+---
+<div class="tmap" id={id} data-max={max}>
+  {books.map((b) => (
+    <section>
+      <div class="book">{meta.books[b.book] ?? b.book}</div>
+      {b.parts.map((pt) => (
+        <>
+          {pt.part && <div class="part">Part {pt.part.split('.')[1]}: {pt.title}</div>}
+          {pt.rows.map((r) => (
+            <div class="row">
+              <div class="lbl" title={`${sectionLabel(r.sec.id)} ${r.sec.title}`}>
+                {r.sec.part ? <b>{r.sec.id}</b> : null} {r.sec.part ? r.sec.title : ''}
+              </div>
+              <div class="cells">
+                {r.paras.map((p) => {
+                  const a = shade(w(p.id), max);
+                  const cls = ['c', /n\d+$/.test(p.id) ? 'note' : '', p.core ? 'core' : ''].join(' ').trim();
+                  return (
+                    <a class={cls} href={passageUrl(p.id)} data-id={p.id}
+                       title={tip(p.id, p.sbn)} aria-label={tip(p.id, p.sbn)}
+                       style={a ? `background: rgba(var(--accent-rgb), ${a.toFixed(3)})` : undefined}></a>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </>
+      ))}
+    </section>
+  ))}
+</div>
