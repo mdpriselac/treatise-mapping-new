@@ -49,7 +49,7 @@ const options = papers.filter((p) => p.cites > 0);
       const url = new URL(location.href);
       url.search = chosen.map((p) => `p=${encodeURIComponent(p.id)}`).join('&');
       history.replaceState(null, '', url);
-      if (!chosen.length) { chartEl.innerHTML = '<p class="muted">Choose papers above.</p>'; tableEl.replaceChildren(); return; }
+      if (!chosen.length) { chartEl.replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Choose papers above.' })); tableEl.replaceChildren(); return; }
       const hide = nocore.checked ? new Set(['1.4.6', 'App']) : new Set<string>();
       const rows: { paper: string; section: string; share: number }[] = [];
       const shares = chosen.map((p) => {
@@ -76,11 +76,25 @@ const options = papers.filter((p) => p.cites > 0);
             title: (d: typeof rows[number]) => `${d.paper}\n${d.section} ${titles[d.section] ?? ''}\n${(d.share * 100).toFixed(1)}% of citations` }),
         ],
       }));
-      // Top sections per paper
-      const top = chosen.map((p, i) => `<div class="card"><strong>${p.name}</strong>${p.title ? `<br><span class="small muted">${p.title}</span>` : ''}<ul class="plain small">${
-        Object.entries(shares[i]).sort((a, b) => b[1] - a[1]).slice(0, 6)
-          .map(([s, v]) => `<li>${(v * 100).toFixed(0)}% · ${s} <span class="muted">${titles[s] ?? ''}</span></li>`).join('')}</ul></div>`);
-      tableEl.innerHTML = `<div class="grid2">${top.join('')}</div>`;
+      // Top sections per paper, built as DOM nodes rather than HTML strings
+      const el = (tag: string, cls = '', text = '') => {
+        const n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n;
+      };
+      const grid = el('div', 'grid2');
+      chosen.forEach((p, i) => {
+        const card = el('div', 'card');
+        card.append(el('strong', '', p.name));
+        if (p.title) card.append(el('br'), el('span', 'small muted', p.title));
+        const ul = el('ul', 'plain small');
+        for (const [s, v] of Object.entries(shares[i]).sort((a, b) => b[1] - a[1]).slice(0, 6)) {
+          const li = el('li', '', `${(v * 100).toFixed(0)}% · ${s} `);
+          li.append(el('span', 'muted', titles[s] ?? ''));
+          ul.append(li);
+        }
+        card.append(ul);
+        grid.append(card);
+      });
+      tableEl.replaceChildren(grid);
     };
     pickers.forEach((s) => s.addEventListener('change', draw));
     nocore.addEventListener('change', draw);

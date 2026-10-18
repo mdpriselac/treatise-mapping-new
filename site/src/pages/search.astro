@@ -61,6 +61,6 @@ import Base from '../layouts/Base.astro';
     // @ts-ignore
     new PagefindUI({ element: '#search', showSubResults: false, showImages: false, resetStyles: false });
   };
-  s.onerror = () => { document.getElementById('search')!.innerHTML = '<p class="muted">Full-text search is available on the built site.</p>'; };
+  s.onerror = () => { document.getElementById('search')!.textContent = 'Full-text search is available on the built site.'; };
   document.head.append(s);
 </script>
