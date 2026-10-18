@@ -49,7 +49,8 @@ Cloud Run service `treatise-new` in GCP project `treatise-mapping-new` (us-centr
 ```bash
 TAG=$(git rev-parse --short HEAD)
 IMG=us-central1-docker.pkg.dev/treatise-mapping-new/cloud-run-source-deploy/treatise-new:$TAG
-docker buildx build --platform linux/amd64 -t $IMG --push .
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://us-central1-docker.pkg.dev
+docker buildx build --platform linux/amd64 -t $IMG --load . && docker push $IMG
 gcloud run deploy treatise-new --image $IMG --project treatise-mapping-new --region us-central1 \
   --service-account treatise-new-run@treatise-mapping-new.iam.gserviceaccount.com \
   --allow-unauthenticated --memory 256Mi --max-instances 3 --port 8080
