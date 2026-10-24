@@ -29,9 +29,12 @@ const zero = papers.filter((p) => p.cites === 0).length;
         quoted words appear in the Treatise on that page.</li>
       <li><strong>Model checks</strong> ({bySource.llm}): the remaining ambiguous page numbers, judged with their context
         by Gemini on Vertex AI. Most ambiguous numbers turned out to cite other scholars’ books, and were dropped.</li>
+      <li><strong>Read by hand</strong> ({bySource.manual ?? 0}): every paper still showing no citations was read in full,
+        footnotes included, and its Treatise citations recorded. Two of them cite other editions (Penguin, Green and Grose)
+        whose pages can’t yet be mapped to Selby-Bigge, so they still show none.</li>
     </ol>
     <p>{t.cites.toLocaleString('en')} citations were accepted. {zero} papers have none, mostly book reviews whose
-      page numbers refer to the book under review.</p>
+      page numbers refer to the book under review, or papers that discuss the Treatise without giving locations.</p>
 
     <h2>From citations to paragraphs</h2>
     <p>Each citation spreads one unit of weight over the paragraphs it covers: a Norton paragraph gets all of it,

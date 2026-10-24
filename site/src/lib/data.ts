@@ -21,7 +21,7 @@ export interface Paper {
   themes: number[] | null; neighbours: { id: string; sim: number }[];
 }
 export interface Citation {
-  text: string; kind: string; source: 'pattern' | 'quote' | 'llm';
+  text: string; kind: string; source: 'pattern' | 'quote' | 'llm' | 'manual';
   context: string; paras: string[]; precise: boolean;
 }
 
@@ -70,6 +70,7 @@ export const sourceLabel: Record<string, string> = {
   pattern: 'Citation pattern',
   quote: 'Quote matched to the Treatise',
   llm: 'Checked by model',
+  manual: 'Read by hand',
 };
 
 /** Shade for a weight, as an opacity of the accent colour (log scale). */
