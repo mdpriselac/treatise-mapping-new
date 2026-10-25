@@ -33,5 +33,8 @@ if k==4:
     for tid,a in ANCHORS.items():
         order[tid]=max((t for t in range(k) if t not in order.values()),key=lambda t:score(best.components_[t],a))
     Wt=Wt[:,[order[t] for t in ANCHORS]]; cols=list(ANCHORS)
+    # The fitted model, so the upload job can place a new paper among the same themes
+    json.dump({'chapters':list(C.columns),'components':{t:best.components_[order[t]].round(6).tolist() for t in ANCHORS}},
+              open('themes_model_k4.json','w'))
     print('theme ids:',{t:f'fit {order[t]}' for t in ANCHORS})
 pd.DataFrame(Wt,index=C.index,columns=cols).round(3).to_csv(f'phase2_themes_noncore_k{k}.csv')

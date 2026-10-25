@@ -129,3 +129,35 @@ button:hover { border-color: var(--ink-3); }
 ul.plain { list-style: none; padding: 0; margin: 0; }
 ul.plain li { padding: .45rem 0; border-bottom: 1px solid var(--rule); }
 select { max-width: 100%; }
+
+/* Upload pages */
+[hidden] { display: none !important; }
+.upload-form { display: grid; gap: .9rem; max-width: 560px; margin-top: 1rem; }
+.upload-form label { display: grid; gap: .25rem; font-size: .9rem; color: var(--ink-2); }
+.upload-form .hint { font-size: .8rem; color: var(--ink-3); }
+.upload-form input[type="file"] { font: inherit; font-size: .9rem; color: var(--ink-2); }
+.upload-form .actions { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.primary:hover { border-color: var(--ink); }
+button:disabled { opacity: .6; cursor: default; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent-2); font-size: inherit; }
+button.link:hover { text-decoration: underline; }
+.msg { font-size: .92rem; color: var(--ink-2); margin: .8rem 0; }
+.msg.err { color: var(--accent); }
+.signedin { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: baseline; font-size: .9rem; color: var(--ink-2); }
+.gsi-button { margin-top: .6rem; min-height: 44px; }
+
+.steps { list-style: none; padding: 0; margin: 0; max-width: 760px; }
+.steps li { position: relative; padding: .45rem 0 .45rem 1.6rem; border-bottom: 1px solid var(--rule); color: var(--ink-3); }
+.steps li::before { content: "○"; position: absolute; left: .15rem; }
+.steps li.done { color: var(--ink-2); }
+.steps li.done::before { content: "✓"; color: var(--t2); }
+.steps li.current { color: var(--ink); }
+.steps li.current::before { content: "●"; color: var(--accent); }
+.steps li.failed { color: var(--ink); }
+.steps li.failed::before { content: "✕"; color: var(--accent); }
+.steps .name { font-weight: 600; }
+.steps .when { float: right; font-size: .8rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+table.data tr.off td + td { opacity: .45; }
+table.data td.use { width: 2rem; }
+#contribute > p:last-child { margin-bottom: 0; }

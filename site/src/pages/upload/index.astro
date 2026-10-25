@@ -1,0 +1,143 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Upload a paper" description="Upload a paper and see where it cites Hume’s Treatise, scored against the corpus.">
+  <h1>Upload a paper</h1>
+  <p class="lead">Upload a PDF of a paper that cites Hume’s Treatise and see where it cites it,
+    scored exactly like the papers in the corpus.</p>
+  <div class="narrow">
+    <p>You sign in with any Google account. The PDF is checked, parsed for citations and then deleted: it is never kept.
+      The citation profile is kept privately for 30 days, at a link only you can open while signed in,
+      and you can offer it to the public corpus, which the site owner reviews.</p>
+    <p class="muted small">Limits: 25 MB and 400 pages per PDF; one upload a minute and five per half hour.</p>
+
+    <div id="auth" class="card"></div>
+
+    <form id="upform" class="upload-form" hidden novalidate>
+      <label>Title
+        <input type="text" name="title" required minlength="2" maxlength="300" autocomplete="off" />
+      </label>
+      <label>Author
+        <input type="text" name="author" required minlength="2" maxlength="200" autocomplete="off" />
+        <span class="hint">As it should appear, e.g. “Ainslie, Donald C.”</span>
+      </label>
+      <label>Date of the paper
+        <input type="text" name="date" required inputmode="numeric" placeholder="YYYY" maxlength="10" autocomplete="off" />
+        <span class="hint">A year (2009), year and month (2009-05) or full date (2009-05-14)</span>
+      </label>
+      <label>PDF
+        <input type="file" name="file" accept="application/pdf,.pdf" required />
+        <span class="hint">Up to 25 MB</span>
+      </label>
+      <div class="actions">
+        <button type="submit" class="primary">Upload and analyse</button>
+      </div>
+      <p id="upmsg" class="msg" role="status" hidden></p>
+    </form>
+
+    <section id="mine" hidden>
+      <h2>Your uploads</h2>
+      <p id="minemsg" class="msg" hidden></p>
+      <ul class="plain" id="minelist"></ul>
+    </section>
+  </div>
+</Base>
+
+<script>
+  import { signIn, api, putFile, ApiError, el, link, say, statusLabel, longDate, MAX_BYTES } from '../../scripts/upload';
+
+  const form = document.getElementById('upform') as HTMLFormElement;
+  const msg = document.getElementById('upmsg')!;
+  const mine = document.getElementById('mine')!;
+  const mineMsg = document.getElementById('minemsg')!;
+  const mineList = document.getElementById('minelist')!;
+  const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+
+  interface Mine { id: string; title: string; author: string; date: string; status: string; created: number }
+
+  const auth = signIn(document.getElementById('auth')!, () => {
+    form.hidden = false;
+    mine.hidden = false;
+    loadMine();
+  }, () => {
+    form.hidden = true;
+    mine.hidden = true;
+  });
+
+  function failed(e: unknown, box: HTMLElement) {
+    if (e instanceof ApiError && e.status === 401) { auth.expired(e.message); return; }
+    say(box, e instanceof Error ? e.message : String(e), true);
+  }
+
+  async function loadMine() {
+    say(mineMsg, 'Loading…');
+    try {
+      const rows = await api<Mine[]>('/api/my-uploads');
+      say(mineMsg, rows.length ? '' : 'None yet.');
+      mineList.replaceChildren(...rows.map((u) => {
+        const li = el('li');
+        li.append(link(`/upload/view/?id=${encodeURIComponent(u.id)}`, u.title || 'Untitled'));
+        const bits = [u.author, u.date, statusLabel[u.status] ?? u.status, u.created ? `uploaded ${longDate(u.created)}` : '']
+          .filter(Boolean).join(' · ');
+        li.append(el('br'), el('span', 'muted small', bits));
+        return li;
+      }));
+    } catch (e) {
+      mineList.replaceChildren();
+      failed(e, mineMsg);
+    }
+  }
+
+  /** YYYY, YYYY-MM or YYYY-MM-DD, and a real month and day. */
+  function validDate(s: string) {
+    const m = s.match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
+    if (!m) return false;
+    const [, y, mo, d] = m;
+    if (mo && (+mo < 1 || +mo > 12)) return false;
+    if (d) {
+      const dt = new Date(Date.UTC(+y, +mo - 1, +d));
+      if (dt.getUTCMonth() !== +mo - 1 || dt.getUTCDate() !== +d) return false;
+    }
+    return true;
+  }
+
+  async function checkFile(f: File | undefined): Promise<string> {
+    if (!f) return 'Choose a PDF to upload.';
+    if (f.size === 0) return 'That file is empty.';
+    if (f.size > MAX_BYTES) return `That file is ${(f.size / 1048576).toFixed(1)} MB; the limit is 25 MB.`;
+    const typeOk = f.type === 'application/pdf' || (!f.type && /\.pdf$/i.test(f.name));
+    const head = await f.slice(0, 5).text().catch(() => '');
+    if (!typeOk || head !== '%PDF-') return 'That doesn’t look like a PDF.';
+    return '';
+  }
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const data = new FormData(form);
+    const title = String(data.get('title') ?? '').trim();
+    const author = String(data.get('author') ?? '').trim();
+    const date = String(data.get('date') ?? '').trim();
+    const file = (form.elements.namedItem('file') as HTMLInputElement).files?.[0];
+    const problem =
+      title.length < 2 ? 'Give the paper’s title.' :
+      author.length < 2 ? 'Give the paper’s author.' :
+      !validDate(date) ? 'Give the date as YYYY, YYYY-MM or YYYY-MM-DD.' :
+      await checkFile(file);
+    if (problem) { say(msg, problem, true); return; }
+
+    submit.disabled = true;
+    try {
+      say(msg, 'Reserving an upload…');
+      const u = await api<{ id: string; uploadUrl: string; uploadHeaders: Record<string, string> }>(
+        '/api/uploads', 'POST', { title, author, date, size: file!.size });
+      say(msg, 'Sending the file…');
+      await putFile(u.uploadUrl, u.uploadHeaders, file!);
+      say(msg, 'Starting the analysis…');
+      await api(`/api/uploads/${encodeURIComponent(u.id)}/start`, 'POST');
+      location.href = `/upload/view/?id=${encodeURIComponent(u.id)}`;
+    } catch (e) {
+      submit.disabled = false;
+      failed(e, msg);
+    }
+  });
+</script>

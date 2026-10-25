@@ -1,0 +1,249 @@
+---
+import Base from '../../layouts/Base.astro';
+import MapLegend from '../../components/MapLegend.astro';
+---
+<Base title="Your upload" description="The citation profile of a paper you uploaded.">
+  <div class="crumbs"><a href="/upload/">Upload</a></div>
+  <div id="auth" class="card" style="margin-bottom:1.4rem"></div>
+  <p id="msg" class="msg" role="status" hidden></p>
+
+  <article id="doc" hidden>
+    <p class="eyebrow" id="d-by"></p>
+    <h1 id="d-title"></h1>
+    <p class="muted" id="d-kept"></p>
+
+    <section id="progress" hidden>
+      <h2>Progress</h2>
+      <ol class="steps" id="steps" aria-live="polite"></ol>
+      <p id="d-error" class="card" hidden></p>
+      <p class="small" id="again" hidden><a href="/upload/">Upload another file →</a></p>
+    </section>
+
+    <section id="result" hidden>
+      <div class="tiles" id="tiles"></div>
+      <p class="card" id="none" hidden></p>
+
+      <div id="has">
+        <p class="lead" id="verdict" hidden></p>
+        <div class="grid2">
+          <div>
+            <h3>Theme mix</h3>
+            <div id="themes"></div>
+            <p class="muted small" style="margin-top:.5rem">Themes are fitted on citations outside 1.4.6 and the Appendix, which nearly every paper cites.</p>
+            <div id="rare-wrap">
+              <h3>Its rarest citations</h3>
+              <ul class="plain" id="rare"></ul>
+            </div>
+          </div>
+          <div>
+            <h3>Nearest papers in the corpus</h3>
+            <ul class="plain" id="nearest"></ul>
+            <p class="muted small" id="nearest-none" hidden>Needs more citations.</p>
+          </div>
+        </div>
+
+        <h2>Where it cites the Treatise</h2>
+        <MapLegend />
+        <div id="map"><p class="muted small">Loading the map…</p></div>
+      </div>
+
+      <div id="evidence-wrap">
+        <h2>The evidence</h2>
+        <p class="muted small">Every citation the pipeline accepted, with the words around it.
+          “Citation pattern” means a standard Norton or Selby-Bigge reference;
+          “quote matched” means the quoted words were found in the Treatise at that page;
+          “checked by model” means a language model judged an ambiguous page number to be a Treatise citation.
+          Untick any that look wrong and the profile is worked out again without them.</p>
+        <p id="ev-msg" class="msg" role="status" hidden></p>
+        <div class="scroll-x">
+          <table class="data">
+            <thead><tr><th><span class="small">Count</span></th><th>Cited as</th><th>Maps to</th><th>Context</th></tr></thead>
+            <tbody id="evidence"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <h2>Offer to the public corpus</h2>
+      <div class="card" id="contribute"></div>
+    </section>
+  </article>
+</Base>
+
+<script>
+  import { signIn, api, ApiError, el, say, longDate, statusLabel, ID_RE } from '../../scripts/upload';
+  import {
+    loadTreatise, tiles, verdict, themeBar, rareList, nearestList, treatiseMap, evidence,
+    type Profile, type UploadCitation, type Treatise,
+  } from '../../scripts/profile';
+
+  interface Step { name: string; detail: string; at: number }
+  interface Upload {
+    id: string; title: string; author: string; date: string; status: string; steps: Step[] | null;
+    profile: Profile | null; citations: UploadCitation[] | null; error: string | null; excluded: number[] | null;
+    contribution: null | 'pending' | 'approved' | 'declined'; created: number | null; expires: string | null;
+  }
+
+  const $ = (id: string) => document.getElementById(id)!;
+  const msg = $('msg');
+  const id = new URLSearchParams(location.search).get('id') ?? '';
+  const STAGES = ['awaiting_file', 'queued', 'checking', 'parsing', 'citations', 'profile', 'done'];
+  const TERMINAL = new Set(['done', 'rejected', 'failed']);
+  const STALE = 20 * 60;   // the signed upload URL lasts 15 minutes
+  let timer: number | undefined;
+  let doc: Upload | null = null;
+  let rendered = false;    // the evidence table is drawn once, then left alone
+
+  const auth = signIn($('auth'), () => { if (ID_RE.test(id)) poll(); }, () => { clearTimeout(timer); $('doc').hidden = true; });
+  if (!ID_RE.test(id)) say(msg, 'This link doesn’t name an upload. Your uploads are listed on the upload page.', true);
+
+  function failed(e: unknown, box: HTMLElement) {
+    if (e instanceof ApiError && e.status === 401) { auth.expired(e.message); return true; }
+    say(box, e instanceof Error ? e.message : String(e), true);
+    return false;
+  }
+
+  async function poll() {
+    clearTimeout(timer);
+    try {
+      doc = await api<Upload>(`/api/uploads/${encodeURIComponent(id)}`);
+    } catch (e) {
+      if (failed(e, msg)) return;
+      if (e instanceof ApiError && e.status === 0) timer = window.setTimeout(poll, 5000);   // offline: keep trying
+      return;
+    }
+    say(msg, '');
+    show(doc);
+    const stale = doc.status === 'awaiting_file' && doc.created && Date.now() / 1000 - doc.created > STALE;
+    if (!TERMINAL.has(doc.status) && !stale) timer = window.setTimeout(poll, 2000);
+  }
+
+  function show(d: Upload) {
+    $('doc').hidden = false;
+    $('d-by').textContent = [d.author, d.date].filter(Boolean).join(' · ');
+    $('d-title').textContent = d.title;
+    document.title = `${d.title} · Treatise Mapping`;
+    $('d-kept').textContent = d.expires ? `Your upload, kept privately until ${longDate(d.expires)}.`
+      : d.contribution === 'approved' ? 'Your upload, accepted into the public corpus.' : 'Your upload.';
+    if (d.status === 'done' && d.profile && d.citations) {
+      $('progress').hidden = true;
+      $('result').hidden = false;
+      result(d);
+    } else {
+      $('result').hidden = true;
+      $('progress').hidden = false;
+      steps(d);
+    }
+  }
+
+  function steps(d: Upload) {
+    const log = d.steps ?? [];
+    const bad = d.status === 'rejected' || d.status === 'failed';
+    // where the run stopped: the status itself, or for rejected/failed the last step reached
+    const at = bad ? Math.max(STAGES.indexOf(log.at(-1)?.name ?? 'queued'), 1) : STAGES.indexOf(d.status);
+    const stale = d.status === 'awaiting_file' && d.created && Date.now() / 1000 - d.created > STALE;
+    $('steps').replaceChildren(...STAGES.map((name, i) => {
+      const last = log.filter((s) => s.name === name).at(-1);
+      const state = i < at || (i === at && name === 'done') ? 'done' : i === at ? (bad ? 'failed' : 'current') : 'todo';
+      const li = el('li', state);
+      if (state === 'current' || state === 'failed') li.setAttribute('aria-current', 'step');
+      if (last?.at) li.append(el('span', 'when', new Date(last.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })));
+      li.append(el('span', 'name', name === 'awaiting_file' && state === 'done' ? 'File received' : statusLabel[name]));
+      const detail = last?.detail ?? '';
+      if (detail) li.append(el('br'), el('span', 'small', detail));
+      if (state === 'current') li.append(' ', el('span', 'muted small', '(in progress)'));
+      return li;
+    }));
+    const err = $('d-error');
+    err.textContent = bad ? (d.error || 'Something went wrong while processing the file.')
+      : stale ? 'The file never arrived, and the link for sending it has expired. Please upload it again.' : '';
+    err.hidden = !err.textContent;
+    $('again').hidden = !(bad || stale);
+  }
+
+  async function result(d: Upload) {
+    const p = d.profile!;
+    const cites = d.citations!;
+    tiles($('tiles'), p);
+    const none = $('none');
+    none.textContent = cites.length === 0
+      ? 'No citations of the Treatise were found in this paper. If it does cite the Treatise, the PDF may be a scan whose text could not be read reliably, or it may cite an edition whose page numbers the detector doesn’t know.'
+      : p.cites === 0 ? 'Every citation is unticked, so there is no profile to show. Tick some back in the table below.' : '';
+    none.hidden = !none.textContent;
+    $('has').hidden = p.cites === 0;
+    $('evidence-wrap').hidden = cites.length === 0;
+    const v = verdict(p);
+    $('verdict').textContent = v ?? '';
+    $('verdict').hidden = !v;
+    contribute(d);
+
+    let t: Treatise;
+    try {
+      t = await loadTreatise();
+    } catch {
+      $('map').replaceChildren(el('p', 'msg err', 'The Treatise map couldn’t load. Reload the page to try again.'));
+      return;
+    }
+    themeBar($('themes'), t, p);
+    rareList($('rare'), t, p);
+    $('rare-wrap').hidden = p.rare.length === 0;
+    nearestList($('nearest'), p);
+    $('nearest-none').hidden = p.nearest.length > 0;
+    treatiseMap($('map'), t, p.weights, true);
+    if (!rendered) {
+      rendered = true;
+      evidence($('evidence'), t, cites, d.excluded ?? [], exclude);
+    }
+  }
+
+  let saving: Promise<void> = Promise.resolve();
+  function exclude(excluded: number[], box: HTMLInputElement) {
+    // queue edits so they reach the API in order; each sends the whole list
+    saving = saving.then(async () => {
+      const evMsg = $('ev-msg');
+      say(evMsg, 'Updating the profile…');
+      try {
+        const r = await api<{ excluded: number[]; profile: Profile }>(
+          `/api/uploads/${encodeURIComponent(id)}/citations`, 'PATCH', { excluded });
+        doc!.excluded = r.excluded;
+        doc!.profile = r.profile;
+        say(evMsg, '');
+        result(doc!);
+      } catch (e) {
+        box.checked = !box.checked;
+        box.closest('tr')?.classList.toggle('off', !box.checked);
+        failed(e, evMsg);
+      }
+    });
+  }
+
+  function contribute(d: Upload) {
+    const box = $('contribute');
+    const p = (text: string) => el('p', '', text);
+    if (d.contribution === 'pending') {
+      box.replaceChildren(p('Offered to the public corpus. The site owner will review it.'));
+    } else if (d.contribution === 'approved') {
+      box.replaceChildren(p('Accepted into the public corpus. Thank you.'));
+    } else if (d.contribution === 'declined') {
+      box.replaceChildren(p('The site owner decided not to add this paper to the public corpus. Your private profile is unaffected.'));
+    } else {
+      const btn = el('button', 'primary', 'Offer to the public corpus');
+      btn.type = 'button';
+      const note = el('p', 'msg', '');
+      note.hidden = true;
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          const r = await api<{ contribution: Upload['contribution'] }>(`/api/uploads/${encodeURIComponent(id)}/contribute`, 'POST');
+          d.contribution = r.contribution;
+          contribute(d);
+        } catch (e) {
+          btn.disabled = false;
+          failed(e, note);
+        }
+      });
+      box.replaceChildren(
+        p('If this paper belongs in the literature on Hume and personal identity, you can offer its profile, with the citations you have left ticked, to the public corpus. The site owner reviews each offer before it appears on the site.'),
+        btn, note);
+    }
+  }
+</script>

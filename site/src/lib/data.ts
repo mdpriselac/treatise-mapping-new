@@ -4,6 +4,7 @@ import passagesJson from '../data/passages.json';
 import papersJson from '../data/papers.json';
 import citationsJson from '../data/citations.json';
 import metaJson from '../data/meta.json';
+import { label, sectionLabel, shadeFor } from './labels';
 
 export interface Paragraph {
   id: string; book: string; section: string; sbn: string;
@@ -48,35 +49,11 @@ export function shortName(p: Paper): string {
   return `${surname} ${p.year ?? 'n.d.'}`;
 }
 
-/** Display form of a Norton id: T 1.4.6.4, T 1.1.1.1 n2, App. 20, Abs. 10 */
-export function label(id: string): string {
-  if (id.startsWith('App')) return `App. ${id.slice(4)}`;
-  if (id.startsWith('Abs')) return `Abs. ${id.slice(3)}`;
-  const m = id.match(/^(.*?)(n\d+)$/);
-  return m ? `T ${m[1]} ${m[2]}` : `T ${id}`;
-}
-
-export function sectionLabel(id: string): string {
-  if (id === '0') return 'Introduction';
-  if (id === 'App') return 'Appendix';
-  if (id === 'Abs') return 'Abstract';
-  return `T ${id}`;
-}
-
-export function passageUrl(id: string) { return `/passages/${id}/`; }
-export function paperUrl(id: string) { return `/papers/${id}/`; }
-
-export const sourceLabel: Record<string, string> = {
-  pattern: 'Citation pattern',
-  quote: 'Quote matched to the Treatise',
-  llm: 'Checked by model',
-  manual: 'Read by hand',
-};
+export { label, sectionLabel, passageUrl, paperUrl, sourceLabel, verdictText } from './labels';
 
 /** Shade for a weight, as an opacity of the accent colour (log scale). */
 export function shade(w: number, max = maxWeight): number {
-  if (w <= 0) return 0;
-  return 0.12 + 0.88 * (Math.log1p(w) / Math.log1p(max));
+  return shadeFor(w, max);
 }
 
 /** Collapse a run of paragraph ids into a short label for the evidence table. */
