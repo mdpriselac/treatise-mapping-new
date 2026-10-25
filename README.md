@@ -11,7 +11,7 @@ This is the modern version of the project, served at
 
 | Path | What |
 | --- | --- |
-| `pipeline/build_data.py` | Exports the site's data from the private corpus workspace |
+| `pipeline/` | The corpus pipeline (docling, citation detection and checks, scoring, measures) and `build_data.py`, which exports the site's data |
 | `site/src/data/` | The exported, derived data the site is built from |
 | `site/` | Astro static site, Observable Plot charts, Pagefind search |
 | `Dockerfile`, `deploy/nginx.conf` | Static container for Cloud Run |
@@ -22,13 +22,14 @@ never added here.
 
 ## Rebuilding the data
 
-The pipeline that converts PDFs (docling), detects and checks citations, and scores papers lives in the private
-corpus workspace. Once it has run, export its results here:
+The pipeline that converts PDFs (docling), detects and checks citations, and scores papers is in
+[`pipeline/`](pipeline/README.md). It reads and writes a private corpus workspace that never enters
+this repo. Its last step exports the derived data here:
 
 ```bash
-python3 pipeline/build_data.py \
+pipeline/.venv/bin/python pipeline/build_data.py \
   --lab ~/Single-File-Processing-for-Hume-Project/modernization_lab \
-  --treatise "~/Single-File-Processing-for-Hume-Project/data/Full Treatise in HTML.txt" \
+  --treatise "$HOME/Single-File-Processing-for-Hume-Project/data/Full Treatise in HTML.txt" \
   --runtime ~/Hume-on-Personal-Identity/data/runtime
 ```
 

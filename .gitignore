@@ -5,3 +5,6 @@ site/.astro/
 __pycache__/
 # The corpus (PDFs, docling output, full texts) never lives in this repo.
 *.pdf
+
+# Pipeline virtualenv
+pipeline/.venv/
