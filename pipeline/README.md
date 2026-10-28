@@ -7,9 +7,10 @@ environment variables (defaults in `paths.py`):
 
 | Variable | What it is |
 | --- | --- |
-| `TM_WORKSPACE` | Private working folder: `docling_corpus/`, `manual_review/`, `rescored/`, the CSVs |
-| `TM_REFERENCE` | 2020 reference data: Norton↔SBN dictionaries, titles, `List-of-Works.csv`, 2020 scores |
+| `TM_WORKSPACE` | Private working folder: `docling_corpus/`, `manual_review/`, `rescored/`, the CSVs (default `workspace/`, gitignored) |
+| `TM_REFERENCE` | 2020 reference data: Norton↔SBN dictionaries, titles, `List-of-Works.csv`, 2020 scores (default: a sibling clone of Hume-on-Personal-Identity) |
 | `TM_TREATISE` | Treatise text with `T 1.4.6.4, SBN 252` paragraph markers |
+| `TM_GCP_PROJECT` | The GCP project the model check calls Vertex AI in |
 
 ## Setup
 
@@ -19,7 +20,7 @@ uv venv -p 3.12 .venv
 uv pip install -p .venv/bin/python -r requirements.txt
 ```
 
-The model check runs Gemini on Vertex AI in GCP project `treatise-mapping-new`, authorised by your
+The model check runs Gemini on Vertex AI in your own GCP project, authorised by your
 `gcloud auth application-default login`. There is no API key.
 
 ## Steps, in order
@@ -59,3 +60,6 @@ A paragraph counts as cited *precisely* when it gets at least 0.3.
 ```bash
 .venv/bin/python -m pytest -q tests
 ```
+
+The tests use a copy of the Norton↔SBN concordance in `tests/fixtures/reference/`, so they run on a
+fresh clone with only `pytest`, `roman`, `pandas` and `numpy` installed.
