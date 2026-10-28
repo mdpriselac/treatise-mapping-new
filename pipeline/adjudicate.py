@@ -3,7 +3,7 @@ Usage: adjudicate.py <claude|gemini> <model> <in.csv> <out.csv>"""
 import sys,csv,json,re,os,time,concurrent.futures as cf
 from paths import CORPUS
 backend,model,src,dst=sys.argv[1:5]
-PROJECT='treatise-mapping-new'
+PROJECT=os.environ.get('TM_GCP_PROJECT', 'your-gcp-project')
 CONV=re.compile(r'[^.\n]{0,200}(Selby-Bigge|Treatise of Human Nature, ed|page references|references to the Treatise|cited as|abbreviat|parenthetical)[^.\n]{0,200}',re.I)
 conv_cache={}
 def convention(paper):

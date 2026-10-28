@@ -8,3 +8,6 @@ __pycache__/
 
 # Pipeline virtualenv
 pipeline/.venv/
+
+# Default location of the private corpus workspace (see pipeline/paths.py)
+workspace/
