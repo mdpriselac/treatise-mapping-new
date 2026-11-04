@@ -64,3 +64,10 @@ pointing to `ghs.googlehosted.com`.
 
 Treatise text and Norton/SBN numbering from [Hume Texts Online](https://davidhume.org/texts/t/), edited by
 Peter Millican and Amyas Merivale.
+Hume's text is in the public domain, but the edition's corrections and paragraph numbering are the editors' work.
+That edited text (`site/src/data/passages.json`, and `upload/job/reference/treatise.txt` where present) is not
+covered by this repo's MIT license, so please credit Hume Texts Online if you reuse it.
+
+## License
+
+The code is under the [MIT License](LICENSE). The Treatise text is excepted, as described under Sources.
