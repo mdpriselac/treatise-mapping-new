@@ -7,9 +7,9 @@ site/src/data/: citation locations, scores, short citing snippets (the
 paper full text leaves the corpus workspace.
 
     python pipeline/build_data.py \
-        --lab ~/Single-File-Processing-for-Hume-Project/modernization_lab \
-        --treatise "~/Single-File-Processing-for-Hume-Project/data/Full Treatise in HTML.txt" \
-        --runtime ~/Hume-on-Personal-Identity/data/runtime
+        --lab "$TM_WORKSPACE" \
+        --treatise "$TM_TREATISE" \
+        --runtime ../Hume-on-Personal-Identity/data/runtime
 """
 import argparse
 import csv
